@@ -4,10 +4,11 @@ import os
 import pandas as pd
 import streamlit as st
 
-BASE_DIR = "/Users/phinnmarkson/PyCharmMiscProject/LiveApp"
-HUD_ZIP_COUNTY = os.path.join(BASE_DIR, "HUDcrosswalkZip_COUNTY.csv")
-ZIPT_ZCTA      = os.path.join(BASE_DIR, "ZiptoZCTA-Table 1.csv")
-CSV_SCORES     = os.path.join(BASE_DIR, "county_vulnerability.csv")
+from os import path
+BASE_DIR = path.dirname("Users/phinnmarkson/PyCharmMiscProject/app.py")          # folder where app.py lives
+HUD_ZIP_COUNTY = path.join(BASE_DIR, "HUDcrosswalkZip_COUNTY.csv")
+ZIPT_ZCTA      = path.join(BASE_DIR, "ZiptoZCTA-Table 1.csv")
+CSV_SCORES     = path.join(BASE_DIR, "county_vulnerability.csv")
 
 
 @st.cache_data
