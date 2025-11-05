@@ -1,9 +1,11 @@
 # ----- absolute data paths -----
-import os
+
+import glob
 
 import pandas as pd
 import streamlit as st
 
+st.write("Files in repo:", glob.glob("*.csv"))
 from os import path
 BASE_DIR = path.dirname("Users/phinnmarkson/PyCharmMiscProject/app.py")          # folder where app.py lives
 HUD_ZIP_COUNTY = path.join(BASE_DIR, "HUDcrosswalkZip_COUNTY.csv")
