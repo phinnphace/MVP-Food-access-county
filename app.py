@@ -10,7 +10,7 @@ st.write("CSV files:", glob.glob("*.csv"))
 st.write("Files in repo:", glob.glob("*.csv"))
 from os import path
 BASE_DIR = path.dirname("Users/phinnmarkson/PyCharmMiscProject/app.py")          # folder where app.py lives
-ZIPT_ZCTA      = os.path.join(BASE_DIR, "ZiptoZCTA-Table 1 2.csv")
+ZIP_ZCTA      = os.path.join(BASE_DIR, "ZiptoZCTA-Table 1 2.csv")
 HUD_ZIP_COUNTY = os.path.join(BASE_DIR, "HUDcrosswalkZip COUNTY.csv")
 CSV_SCORES     = path.join(BASE_DIR, "county_vulnerability.csv")
 
@@ -21,13 +21,13 @@ def load():
 
 df = load()
 
-# ===== NEW: ZIP INPUT =====
+
 # ===== NEW: ZIP INPUT =====
 st.title("Food Access Vulnerability")
 zip_input = st.text_input("Enter a 5-digit ZIP code", placeholder="30601")
 if zip_input and zip_input.isdigit() and len(zip_input) == 5:
     # 1. ZIP → ZCTA
-    z2z = pd.read_csv(ZIPT_ZCTA)[["ZIP_CODE", "zcta"]]
+    z2z = pd.read_csv(ZIP_ZCTA)[["ZIP_CODE", "zcta"]]
     z2z["ZIP_CODE"] = z2z["ZIP_CODE"].astype(str)
     zcta_row = z2z.loc[z2z["ZIP_CODE"] == zip_input]
     if not zcta_row.empty:
