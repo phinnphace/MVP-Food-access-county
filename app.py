@@ -10,8 +10,8 @@ st.write("CSV files:", glob.glob("*.csv"))
 st.write("Files in repo:", glob.glob("*.csv"))
 from os import path
 BASE_DIR = path.dirname("Users/phinnmarkson/PyCharmMiscProject/app.py")          # folder where app.py lives
-ZIPT_ZCTA      = os.path.join(BASE_DIR, "ZiptozCTA-Table 1 2.csv")
-HUD_ZIP_COUNTY = os.path.join(BASE_DIR, "HUDcrosswakzip_CoUNTY.csv")
+ZIPT_ZCTA      = os.path.join(BASE_DIR, "ZiptoZCTA-Table 1 2.csv")
+HUD_ZIP_COUNTY = os.path.join(BASE_DIR, "HUDcrosswalkZip COUNTY.csv")
 CSV_SCORES     = path.join(BASE_DIR, "county_vulnerability.csv")
 
 
