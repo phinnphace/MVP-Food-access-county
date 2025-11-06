@@ -1,10 +1,12 @@
 # ----- absolute data paths -----
-import glob
-import os  # ← add this line
-import plotly.express as px
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import plotly.express as px
 
+import os, glob
+st.write("CWD:", os.getcwd())
+st.write("Files:", glob.glob("*"))
+st.write("CSV files:", glob.glob("*.csv"))
 st.write("Files in repo:", glob.glob("*.csv"))
 from os import path
 BASE_DIR = path.dirname("Users/phinnmarkson/PyCharmMiscProject/app.py")          # folder where app.py lives
@@ -20,17 +22,20 @@ def load():
 df = load()
 
 # ===== NEW: ZIP INPUT =====
+# ===== NEW: ZIP INPUT =====
 st.title("Food Access Vulnerability")
 zip_input = st.text_input("Enter a 5-digit ZIP code", placeholder="30601")
 if zip_input and zip_input.isdigit() and len(zip_input) == 5:
     # 1. ZIP → ZCTA
     z2z = pd.read_csv(ZIPT_ZCTA)[["ZIP_CODE", "zcta"]]
-    zcta_row = z2z.loc[z2z["ZIP_CODE"].astype(str) == zip_input]
+    z2z["ZIP_CODE"] = z2z["ZIP_CODE"].astype(str)
+    zcta_row = z2z.loc[z2z["ZIP_CODE"] == zip_input]
     if not zcta_row.empty:
         zcta = str(zcta_row["zcta"].iloc[0])
         # 2. ZCTA → COUNTY (treat ZCTA as ZIP in HUD file)
         z2fips = pd.read_csv(HUD_ZIP_COUNTY)[["ZIP", "COUNTY"]]
-        county_row = z2fips.loc[z2fips["ZIP"].astype(str) == zcta]
+        z2fips["ZIP"] = z2fips["ZIP"].astype(str)
+        county_row = z2fips.loc[z2fips["ZIP"] == zcta]
         if not county_row.empty:
             county_fips = str(county_row["COUNTY"].iloc[0]).zfill(5)
             match = df[df["fips_code"] == county_fips]
