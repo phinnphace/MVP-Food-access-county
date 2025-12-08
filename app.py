@@ -190,7 +190,7 @@ st.markdown(f"Scores derived from global Z-score standardization, Decatur County
 st.markdown("""
 **Model Formula:**  
 - **V_final_Weighted** = C_Economic + C_Geographic + TVS  
-- **TVS** = 0.4×C_Vehicle + 0.3×C_Transit + 0.2×C_Internet + 0.1×C_Roads  
+- **TVS** = 0.4 * C_Vehicle + 0.3 * C_Transit + 0.2 * C_Internet + 0.1 * C_Roads  
 - **C_Transit_B** = +3.0 (Systemic Transit Penalty - no public transit in county)
 """)
 
@@ -236,8 +236,4 @@ st.markdown("""
 
 - **HUD-USPS ZIP Code Crosswalk:** U.S. Department of Housing and Urban Development, Office of Policy Development and Research. *HUD-USPS ZIP Code Crosswalk Files*. 
   [huduser.gov/portal/datasets/usps_crosswalk.html](https://www.huduser.gov/portal/datasets/usps_crosswalk.html)
-""")
-
-- **TVS** = 0.4×C_Vehicle + 0.3×C_Transit + 0.2×C_Internet + 0.1×C_Roads  
-- **C_Transit_B** = +3.0 (Systemic Transit Penalty - no public transit in county)
 """)
