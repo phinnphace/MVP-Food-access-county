@@ -1,3 +1,7 @@
 streamlit
+geopandas
 pandas
+altair
 plotly
+pyproj
+shapely

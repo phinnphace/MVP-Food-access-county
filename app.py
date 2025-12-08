@@ -1,231 +1,194 @@
-# --- imports ---
-import os
-import glob
-from pathlib import Path
-
 import streamlit as st
+import geopandas as gpd
 import pandas as pd
+import altair as alt
 import plotly.express as px
+import json
+import os
 
-# --- paths / debug ---
-BASE_DIR = Path(__file__).resolve().parent
+# --- 1. CONFIGURATION AND DATA LOADING ---
+st.set_page_config(layout="wide", page_title="Decatur County Contextual Vulnerability Score")
 
-st.write("CWD:", os.getcwd())
-st.write("Files:", glob.glob("*"))
-st.write("CSV files:", glob.glob("*.csv"))
+# Works for both local development and Streamlit Cloud
+FINAL_DATA_PATH = os.path.join(os.path.dirname(__file__), 'tracts_with_scores.geojson')
+JOIN_COLUMN = 'GEOID'
 
-CSV_SCORES   = BASE_DIR / "county_vulnerability.csv"
-HUD_ZIP_CNTY = BASE_DIR / "HUDcrosswalkZip_COUNTY.csv"       # expects at least: ZIP, county_fips (or state_fips+county_code), res_ratio (optional)
-ZIP_ZCTA     = BASE_DIR / "ZiptoZCTA-Table 1 2.csv"          # expects at least: ZIP, ZCTA (column names normalized below)
-
-# --- helpers ---
-def normalize_cols(df: pd.DataFrame) -> pd.DataFrame:
-    # lower-case, strip spaces, unify common column names
-    df = df.copy()
-    df.columns = (
-        df.columns
-        .str.strip()
-        .str.lower()
-        .str.replace(r"[^a-z0-9]+", "_", regex=True)
-    )
-    # common renames
-    renames = {
-        "zip_code": "zip",
-        "zipcode": "zip",
-        "zcta5": "zcta",
-        "zcta_code": "zcta",
-        "zcta5ce10": "zcta",
-        "county": "county_fips",   # some HUD files ship 'county' as 5-digit FIPS
-        "countyfp": "county_code", # 3-digit county code only
-        "statefp": "state_fips",
-    }
-    for k, v in renames.items():
-        if k in df.columns and v not in df.columns:
-            df = df.rename(columns={k: v})
-    return df
-
-def as_5(s):
-    """Return a zero-padded 5-char string if possible, else None."""
+@st.cache_data
+def load_final_geodata(filepath):
+    """Loads the final scored GeoDataFrame."""
     try:
-        s = str(s).strip()
-        digits = "".join(ch for ch in s if ch.isdigit())
-        if not digits:
-            return None
-        return digits.zfill(5)[:5]
-    except Exception:
-        return None
+        final_geodf = gpd.read_file(filepath)
+        final_geodf[JOIN_COLUMN] = final_geodf[JOIN_COLUMN].astype(str)
+        return final_geodf
+    except Exception as e:
+        st.error(f"Error loading geospatial data: {e}")
+        return gpd.GeoDataFrame()
 
-# --- data ---
-@st.cache_data
-def load_scores(csv_path: Path) -> pd.DataFrame:
-    df = pd.read_csv(csv_path, dtype={"fips_code": str})
-    df["fips_code"] = df["fips_code"].apply(as_5)
-    return df
+final_geodf = load_final_geodata(FINAL_DATA_PATH)
 
-@st.cache_data
-def load_hud_zip_county(hud_path: Path) -> pd.DataFrame:
-    hud = pd.read_csv(hud_path, dtype=str)
-    hud = normalize_cols(hud)
-    # Try to build a 5-digit FIPS if not present
-    if "county_fips" not in hud.columns:
-        # many HUD files have state_fips (2) + county_code (3)
-        if {"state_fips", "county_code"}.issubset(hud.columns):
-            hud["county_fips"] = hud["state_fips"].str.zfill(2) + hud["county_code"].str.zfill(3)
-    # zip should be 5-digit
-    if "zip" in hud.columns:
-        hud["zip"] = hud["zip"].apply(as_5)
-    # optional numeric weights
-    for col in ("res_ratio", "tot_ratio", "bus_ratio"):
-        if col in hud.columns:
-            hud[col] = pd.to_numeric(hud[col], errors="coerce")
-    return hud
+if final_geodf.empty:
+    st.error("No data loaded. Please check the file path.")
+    st.stop()
 
-@st.cache_data
-def load_zip_zcta(z_path: Path) -> pd.DataFrame:
-    z = pd.read_csv(z_path, dtype=str)
-    z = normalize_cols(z)
-    # normalize keys
-    if "zip" in z.columns:
-        z["zip"] = z["zip"].apply(as_5)
-    if "zcta" in z.columns:
-        z["zcta"] = z["zcta"].apply(as_5)
-    return z
+# --- 2. MAP VISUALIZATION ---
+st.title("🍎 Food Access Vulnerability: Contextual Scoring in Decatur County, GA")
 
-df         = load_scores(CSV_SCORES)
-hud_cross  = load_hud_zip_county(HUD_ZIP_CNTY)
-zip_to_zct = load_zip_zcta(ZIP_ZCTA)
+st.markdown("""
+This dashboard demonstrates an **Equity-Centered Scoring Model** where context (RUCA classification) 
+is used to weight components, correcting for the flaws of 'one-size-fits-all' vulnerability indices. 
+The model incorporates **Composite Economic** and **Systemic Transit Penalty** factors.
+""")
 
-# --- map ---
-st.title("Food Access Vulnerability")
+# --- A. Create Plotly Choropleth Map ---
+st.subheader("1. Final Contextual Vulnerability Score (V_final_Weighted)")
 
-fig = px.choropleth(
-    df,
-    locations="fips_code",
-    geojson="https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json",
-    color="Score",
-    color_continuous_scale="RdYlBu_r",
-    scope="usa",
-    hover_name="County_Name",
-    hover_data={"State": True, "Score": True, "Label": True},
+MIN_SCORE = final_geodf['V_final_Weighted'].min()
+MAX_SCORE = final_geodf['V_final_Weighted'].max()
+
+st.caption(f"Score Range: {MIN_SCORE:.2f} (Green/Low Vulnerability) to {MAX_SCORE:.2f} (Red/High Vulnerability)")
+
+# Convert to GeoJSON for Plotly
+geojson_data = json.loads(final_geodf.to_json())
+
+# Calculate center
+centroid = final_geodf.geometry.unary_union.centroid
+center_lat, center_lon = centroid.y, centroid.x
+
+# Create Plotly choropleth
+fig = px.choropleth_mapbox(
+    final_geodf,
+    geojson=geojson_data,
+    locations=final_geodf.index,
+    color='V_final_Weighted',
+    color_continuous_scale='RdYlGn_r',  # Red-Yellow-Green reversed (red = high)
+    range_color=[MIN_SCORE, MAX_SCORE],
+    mapbox_style='carto-positron',
+    zoom=9,
+    center={"lat": center_lat, "lon": center_lon},
+    opacity=0.7,
+    hover_data={
+        'GEOID': True,
+        'V_final_Weighted': ':.2f',
+        'V_final_Unweighted': ':.2f',
+        'poverty_pct': ':.1f'
+    },
+    labels={
+        'V_final_Weighted': 'Weighted Score',
+        'V_final_Unweighted': 'Unweighted Score',
+        'poverty_pct': 'Poverty %'
+    }
 )
-fig.update_layout(margin={"r": 0, "t": 0, "l": 0, "b": 0})
+
+fig.update_layout(
+    margin={"r": 0, "t": 0, "l": 0, "b": 0},
+    height=500,
+    coloraxis_colorbar=dict(
+        title="Vulnerability<br>Score",
+        tickformat=".1f"
+    )
+)
+
 st.plotly_chart(fig, use_container_width=True)
 
-# --- user inputs (ZIP or ZCTA). If both provided, ZIP takes precedence ---
-with st.container(border=True):
-    st.subheader("Lookup by ZIP or ZCTA")
-    zip_input  = st.text_input("Enter 5-digit ZIP", value=st.session_state.get("selected_zip", ""))
-    zcta_input = st.text_input("Enter 5-digit ZCTA (optional)", value=st.session_state.get("selected_zcta", ""))
+# --- 3. COMPARATIVE ANALYSIS ---
+st.markdown("---")
+st.subheader("2. Context vs. Flattening: Comparison of Scoring Models")
 
-# keep session in sync so subsequent interactions can reuse
-if zip_input:
-    st.session_state["selected_zip"] = zip_input
-if zcta_input:
-    st.session_state["selected_zcta"] = zcta_input
+st.markdown("""
+The comparison shows the difference between the **Unweighted Score** (simple additive) 
+and the **Weighted Score** (using Transport Vulnerability Score with RUCA context weights).
+""")
 
-zip_clean  = as_5(zip_input) if zip_input else None
-zcta_clean = as_5(zcta_input) if zcta_input else None
+comparison_data = final_geodf[['GEOID', 'V_final_Unweighted', 'V_final_Weighted']].melt(
+    id_vars='GEOID', var_name='Score Type', value_name='Score'
+)
 
-# also allow map click
-selected_fips_click = st.session_state.get("last_clicked")
+chart_comp = alt.Chart(comparison_data).mark_bar().encode(
+    x=alt.X('GEOID:N', sort=alt.EncodingSortField(field="Score", op="max", order="descending"), title='Tract GEOID'),
+    y=alt.Y('Score:Q', title='Vulnerability Score (Higher = More Vulnerable)'),
+    color=alt.Color('Score Type:N', scale=alt.Scale(range=['#007ACC', '#D34D4D']), 
+                    legend=alt.Legend(title="Score Type")),
+    xOffset='Score Type:N',
+    tooltip=['GEOID', 'Score Type', alt.Tooltip('Score', format=".2f")]
+).properties(
+    title="Unweighted vs. Weighted (TVS) Vulnerability Scores",
+    height=400
+).interactive()
 
-# --- derive flags and a candidate county_fips to display ---
-county_not_in_sample = False
-zcta_not_found = False
-zip_not_found = False
-resolved_county_fips = None
-resolution_note = None  # tell the user how we resolved ambiguity
+st.altair_chart(chart_comp, use_container_width=True)
 
-def resolve_county_from_zip(zip5: str):
-    """Resolve county FIPS from ZIP using HUD. Prefer highest residential ratio, else most frequent."""
-    if not zip5 or "zip" not in hud_cross.columns:
-        return None, None
-    sub = hud_cross[hud_cross["zip"] == zip5].copy()
-    if sub.empty:
-        return None, None
-    if "county_fips" not in sub.columns:
-        return None, None
+# --- 4. COMPONENT BREAKDOWN ---
+st.markdown("---")
+st.subheader("3. Component Breakdown: Identifying Specific Vulnerability Drivers")
 
-    if "res_ratio" in sub.columns and sub["res_ratio"].notna().any():
-        sub = sub.sort_values(["res_ratio", "county_fips"], ascending=[False, True])
-        note = "Resolved by highest residential ratio in HUD ZIP–County crosswalk."
-        return sub.iloc[0]["county_fips"], note
+st.markdown("""
+This view is critical for **anti-erasure practice**, showing exactly which component 
+(Economic, Geographic, Vehicle, Transit, Internet, Roads) drives the score for each tract.
+""")
 
-    # fallback: most frequent county for that ZIP
-    counts = sub["county_fips"].value_counts()
-    top = counts.index[0]
-    note = "Resolved by most frequent county in HUD ZIP–County crosswalk (no residential ratio available)."
-    return top, note
+selected_geoid = st.selectbox(
+    "Select a Tract GEOID:",
+    final_geodf['GEOID'].sort_values()
+)
 
-def resolve_zcta_from_zip(zip5: str):
-    """Resolve ZCTA from ZIP using ZIP–ZCTA table. Returns the most common mapping if multiple."""
-    if not zip5 or {"zip", "zcta"}.issubset(zip_to_zct.columns) is False:
-        return None
-    sub = zip_to_zct[zip_to_zct["zip"] == zip5]
-    if sub.empty:
-        return None
-    # If multiple ZCTAs for a ZIP, take the mode
-    zcta_mode = sub["zcta"].mode(dropna=True)
-    return zcta_mode.iloc[0] if not zcta_mode.empty else None
+components = ['C_Economic', 'C_Geographic', 'C_Vehicle_A', 'C_Transit_B', 'C_Internet_C', 'C_Roads_D']
+available_components = [c for c in components if c in final_geodf.columns]
 
-# Priority: ZIP input > ZCTA input > map click
-if zip_clean:
-    # 1) ZIP -> ZCTA (for messaging), 2) ZIP -> County FIPS -> df
-    zcta_guess = resolve_zcta_from_zip(zip_clean)
-    if zcta_guess is None:
-        zip_not_found = True
-    resolved_county_fips, resolution_note = resolve_county_from_zip(zip_clean)
-    if resolved_county_fips:
-        county_not_in_sample = df.loc[df["fips_code"] == resolved_county_fips].empty
+if available_components:
+    breakdown_data_row = final_geodf[final_geodf['GEOID'] == selected_geoid].iloc[0]
+    
+    breakdown_data = pd.DataFrame({
+        'Component': available_components,
+        'Vulnerability Score': [float(breakdown_data_row[c]) for c in available_components]
+    })
+    
+    chart_breakdown = alt.Chart(breakdown_data).mark_bar().encode(
+        x=alt.X('Vulnerability Score:Q', title='Z-Score (Higher = More Vulnerable)'),
+        y=alt.Y('Component:N', sort=None, title=''),
+        color=alt.condition(
+            alt.datum['Vulnerability Score'] > 0,
+            alt.value('#D34D4D'),
+            alt.value('#2E8B57')
+        ),
+        tooltip=['Component', alt.Tooltip('Vulnerability Score', format=".2f")]
+    ).properties(
+        title=f"Component Scores for Tract {selected_geoid}",
+        height=300
+    )
+    
+    st.altair_chart(chart_breakdown, use_container_width=True)
+    
+    # Show tract details
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Weighted Score", f"{breakdown_data_row['V_final_Weighted']:.2f}")
+    with col2:
+        st.metric("Unweighted Score", f"{breakdown_data_row['V_final_Unweighted']:.2f}")
+    with col3:
+        st.metric("Poverty Rate", f"{breakdown_data_row['poverty_pct']:.1f}%")
 else:
-    if zcta_clean:
-        # ZCTA provided directly; try to find counties that contain that ZCTA via HUD by first mapping ZIPs -> counties
-        # Step A: ZIPs that map to this ZCTA
-        if {"zip", "zcta"}.issubset(zip_to_zct.columns):
-            z_zips = zip_to_zct.loc[zip_to_zct["zcta"] == zcta_clean, "zip"].dropna().unique().tolist()
-        else:
-            z_zips = []
-        if not z_zips:
-            zcta_not_found = True
-        else:
-            # Step B: resolve a county from those ZIPs. Prefer the county that appears most after ZIP->county resolution.
-            resolved = []
-            for z in z_zips:
-                cfips, _ = resolve_county_from_zip(z)
-                if cfips:
-                    resolved.append(cfips)
-            if resolved:
-                # choose the mode county across ZIPs
-                resolved_county_fips = pd.Series(resolved).mode().iloc[0]
-                resolution_note = "Resolved by ZIPs linked to the provided ZCTA using HUD ZIP–County crosswalk."
-                county_not_in_sample = df.loc[df["fips_code"] == resolved_county_fips].empty
-            else:
-                zcta_not_found = True
-    else:
-        # no manual input; fall back to map click if present
-        if selected_fips_click:
-            resolved_county_fips = as_5(selected_fips_click)
-            county_not_in_sample = df.loc[df["fips_code"] == resolved_county_fips].empty
+    st.warning("Component scores not found. Please re-run: python3 vulnerability_scoring_weighted.py && python3 merge_geometry.py")
 
-# --- details panel with proper control flow ---
-if resolved_county_fips and not county_not_in_sample:
-    row = df.loc[df["fips_code"] == resolved_county_fips].iloc[0]
+# --- 5. DATA TABLE ---
+st.markdown("---")
+st.subheader("4. Full Data Table")
 
-    st.subheader(f"{row['County_Name']}, {row['State']} ({resolved_county_fips})")
-    if resolution_note:
-        st.caption(resolution_note)
+display_cols = ['GEOID', 'TRACT_LABEL', 'poverty_pct', 'C_Economic', 'C_Geographic', 
+                'C_Vehicle_A', 'C_Transit_B', 'C_Internet_C', 'C_Roads_D', 'TVS',
+                'V_final_Unweighted', 'V_final_Weighted']
+available_display = [c for c in display_cols if c in final_geodf.columns]
 
-    st.write(f"**Score:** {row['Score']} | **Label:** {row['Label']}")
-    st.write(f"**Median Income:** ${row['MedianIncome']:,.0f}")
-    st.write(f"**% Zero-Vehicle HH:** {row['PctZeroVehicleHH']:.1f}")
-    st.write(f"**Adjusted Supermarket Density:** {row['aden_supermarkets']:.2f}")
-    st.write(f"**% No Internet:** {row['PctNoInternet']:.1f}")
+st.dataframe(
+    final_geodf[available_display].round(3),
+    use_container_width=True
+)
 
-elif county_not_in_sample:
-    st.warning("County not in our sample.")
-elif zcta_not_found:
-    st.warning("ZCTA not found in county cross-walk.")
-elif zip_not_found:
-    st.warning("ZIP not found in ZCTA table.")
-else:
-    st.info("Enter a ZIP or ZCTA, or click a county on the map to view details.")
+# --- FINAL NOTE ---
+st.markdown("---")
+st.markdown(f"**Data Source:** Scores derived from global Z-score standardization, Decatur County tracts (N={len(final_geodf)})")
+st.markdown("""
+**Model Formula:**  
+- **V_final_Weighted** = C_Economic + C_Geographic + TVS  
+- **TVS** = 0.4×C_Vehicle + 0.3×C_Transit + 0.2×C_Internet + 0.1×C_Roads  
+- **C_Transit_B** = +3.0 (Systemic Transit Penalty - no public transit in county)
+""")
