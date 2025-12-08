@@ -183,12 +183,61 @@ st.dataframe(
     use_container_width=True
 )
 
-# --- FINAL NOTE ---
+# --- MODEL FORMULA ---
 st.markdown("---")
-st.markdown(f"**Data Source:** Scores derived from global Z-score standardization, Decatur County tracts (N={len(final_geodf)})")
+st.subheader("5. Model Methodology")
+st.markdown(f"Scores derived from global Z-score standardization, Decatur County tracts (N={len(final_geodf)})")
 st.markdown("""
 **Model Formula:**  
 - **V_final_Weighted** = C_Economic + C_Geographic + TVS  
+- **TVS** = 0.4×C_Vehicle + 0.3×C_Transit + 0.2×C_Internet + 0.1×C_Roads  
+- **C_Transit_B** = +3.0 (Systemic Transit Penalty - no public transit in county)
+""")
+
+# --- DATA SOURCES ---
+st.markdown("---")
+st.subheader("6. Data Sources & Citations")
+
+st.markdown("""
+#### U.S. Census Bureau - American Community Survey (ACS) 5-Year Estimates
+
+- **Median Household Income:** U.S. Census Bureau. (2024). *American Community Survey 5-Year Estimates: B19013 - Median Household Income, 2019-2023*. 
+  [data.census.gov](https://data.census.gov/table/ACSDT5Y2023.B19013)
+
+- **Poverty Status:** U.S. Census Bureau. (2024). *American Community Survey 5-Year Estimates: S1701 - Poverty Status, 2019-2023*. 
+  [data.census.gov](https://data.census.gov/table/ACSST5Y2023.S1701)
+
+- **Vehicle Availability:** U.S. Census Bureau. (2024). *American Community Survey 5-Year Estimates: B08201 - Household Size by Vehicles Available, 2019-2023*. 
+  [data.census.gov](https://data.census.gov/table/ACSDT5Y2023.B08201)
+
+#### National Neighborhood Data Archive (NaNDA) - ICPSR
+
+- **Grocery Stores:** Melendez, R., Finlay, J., Clarke, P., Noppert, G., & Gypin, L. (2024). *NaNDA: Grocery and Food Stores by Census Tract and ZCTA, United States, 1990-2021*. 
+  [https://doi.org/10.3886/E209313V1](https://doi.org/10.3886/E209313V1)
+
+- **Transit Stops:** Pan, L., Melendez, R., Clarke, P., Noppert, G., Gomez-Lopez, I., Chenoweth, M., & Gypin, L. (2024). *NaNDA: Public Transit Stops by Census Tract and ZCTA, United States, 2016-2018 and 2024*. 
+  [https://doi.org/10.3886/ICPSR38605.v2](https://doi.org/10.3886/ICPSR38605.v2)
+
+- **Road Infrastructure:** Pan, L., Melendez, R., Clarke, P., Noppert, G., & Gypin, L. (2024). *NaNDA: Primary and Secondary Roads by Census Tract and ZCTA, United States, 2010 and 2020*. 
+  [https://doi.org/10.3886/ICPSR38585.v2](https://doi.org/10.3886/ICPSR38585.v2)
+
+- **Internet Access:** Li, M., Gomez-Lopez, I., Khan, A., Clarke, P., & Chenoweth, M. (2022). *NaNDA: Internet Access by Census Tract and ZCTA, United States, 2015-2019*. 
+  [https://doi.org/10.3886/ICPSR38559.v1](https://doi.org/10.3886/ICPSR38559.v1)
+
+#### USDA Economic Research Service
+
+- **Rural-Urban Continuum Codes (RUCC):** U.S. Department of Agriculture, Economic Research Service. (January 2024). *Rural-Urban Continuum Codes*. 
+  [USDA ERS](https://www.ers.usda.gov/data-products/rural-urban-continuum-codes/)
+
+- **Rural-Urban Commuting Area Codes (RUCA):** U.S. Department of Agriculture, Economic Research Service. (July 2025). *2020 Rural-Urban Commuting Area Codes*. 
+  [USDA ERS](https://www.ers.usda.gov/data-products/rural-urban-commuting-area-codes/)
+
+#### Geographic Crosswalks
+
+- **HUD-USPS ZIP Code Crosswalk:** U.S. Department of Housing and Urban Development, Office of Policy Development and Research. *HUD-USPS ZIP Code Crosswalk Files*. 
+  [huduser.gov/portal/datasets/usps_crosswalk.html](https://www.huduser.gov/portal/datasets/usps_crosswalk.html)
+""")
+
 - **TVS** = 0.4×C_Vehicle + 0.3×C_Transit + 0.2×C_Internet + 0.1×C_Roads  
 - **C_Transit_B** = +3.0 (Systemic Transit Penalty - no public transit in county)
 """)
