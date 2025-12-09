@@ -34,6 +34,13 @@ if final_geodf.empty:
 st.title("🍎 Food Access Vulnerability: Contextual Scoring in Decatur County, GA")
 
 st.markdown("""
+**RUCA (Rural-Urban Commuting Area)** codes classify census tracts based on how people live and travel. 
+Unlike county-level categories, RUCA identifies whether a tract is urban, suburban, rural, or remote 
+by looking at commuting patterns and local connectivity. It gives a more realistic picture of access 
+conditions, especially in areas where a single county includes both dense urban centers and isolated 
+rural communities. RUCA helps interpret food access barriers in context rather than treating all 
+"rural" or all "urban" places the same.
+
 This dashboard demonstrates an **Equity-Centered Scoring Model** where context (RUCA classification) 
 is used to weight components, correcting for the flaws of 'one-size-fits-all' vulnerability indices. 
 The model incorporates **Composite Economic** and **Systemic Transit Penalty** factors.
@@ -183,57 +190,101 @@ st.dataframe(
     use_container_width=True
 )
 
-# --- MODEL FORMULA ---
 st.markdown("---")
 st.subheader("5. Model Methodology")
-st.markdown(f"Scores derived from global Z-score standardization, Decatur County tracts (N={len(final_geodf)})")
-st.markdown("""
-**Model Formula:**  
-- **V_final_Weighted** = C_Economic + C_Geographic + TVS  
-- **TVS** = 0.4 * C_Vehicle + 0.3 * C_Transit + 0.2 * C_Internet + 0.1 * C_Roads  
-- **C_Transit_B** = +3.0 (Systemic Transit Penalty - no public transit in county)
+
+st.markdown(r"""
+All standardized variables use global mean ($\mu$) and global standard deviation ($\sigma$) from the master dataset.  
+This ensures Decatur County's tracts (N=8) are evaluated relative to the broader landscape rather than an artificially small local sample.
 """)
 
-# --- DATA SOURCES ---
+st.markdown("#### Model Formulas")
+
+st.markdown("**Final Weighted Model**")
+st.latex(r"V_{final\_W} = C_{Eco} + C_{Geo} + TVS")
+
+st.markdown("**Transport Vulnerability Score**")
+st.latex(r"TVS = 0.5\,C_A + 0.2\,C_B + 0.2\,C_{Internet\_C} + 0.1\,C_{Roads\_D}")
+
+st.markdown("**Transit Absence Penalty**")
+st.latex(r"C_{Transit\_B} = +3.0")
+
+st.markdown("**Unweighted Model (for comparison)**")
+st.latex(r"V_{final\_UW} = C_{Eco} + C_{Geo} + C_A + C_{Transit\_B} + C_{Internet\_C} + C_{Roads\_D}")
+
 st.markdown("---")
-st.subheader("6. Data Sources & Citations")
+st.markdown("#### Component Definitions")
+
+st.markdown("**1. Economic Vulnerability (C_Economic)**")
+st.markdown(r"""
+**Concept:** Income alone hides deprivation. Pairing reversed income with positive poverty rate prevents flattening of economic reality.  
+**Variables:** Median Household Income, Poverty Rate (%)
+""")
+st.latex(r"C_{Economic} = -Z_{Income} + Z_{Poverty\_Pct}")
+
+st.markdown("**2. Geographic Vulnerability (C_Geo)**")
+st.markdown(r"""
+**Concept:** Store density directly indicates food resource availability. Low density increases vulnerability.  
+**Variable:** den_totalfoodstores (density of all food stores)
+""")
+st.latex(r"C_{Geo} = -Z_{den\_totalfoodstores}")
+
+st.markdown("**3. Vehicle Access Vulnerability (C_Vehicle_A)**")
+st.markdown(r"""
+**Concept:** In rural areas without transit, lacking a vehicle is one of the strongest predictors of limited access.  
+**Variable:** Vehicles_PctHH_NoVehicle
+""")
+st.latex(r"C_{Vehicle\_A} = Z_{Vehicles\_PctHH\_NoVehicle}")
+
+st.markdown("**4. Transit Access Vulnerability (C_Transit_B)**")
+st.markdown(r"""
+**Concept:** Transit stop availability is protective. Zero availability indicates systemic infrastructure failure.  
+**Variable:** STOPS_PER_CAPITA  
+For tracts with no transit, impute systemic penalty:
+""")
+st.latex(r"C_{Transit\_B} = +3.0 \quad \text{(when no transit exists)}")
+st.markdown("Main formula:")
+st.latex(r"C_{Transit\_B} = -Z_{STOPS\_PER\_CAPITA}")
+
+st.markdown("**5. Internet Access Vulnerability (C_Internet_C)**")
+st.markdown(r"""
+**Concept:** Digital connectivity increasingly substitutes for physical access. Lack-of-access increases vulnerability; access variables reduce it.  
+**Variables:** est_NO_INT, pct_no_internet, pct_cellular_broadband (protective)
+""")
+st.latex(r"C_{Internet\_C} = Z_{est\_NO\_INT} + Z_{pct\_no\_internet} - Z_{pct\_cellular\_broadband}")
+
+st.markdown("**6. Roads / Walkability Vulnerability (C_Roads_D)**")
+st.markdown(r"""
+**Concept:** Primary and secondary roads serve as a proxy for mobility infrastructure. Low road density increases vulnerability.  
+**Variable:** PROP_PRIM_SEC_ROADS
+""")
+st.latex(r"C_{Roads\_D} = -Z_{PROP\_PRIM\_SEC\_ROADS}")
+
+st.markdown("---")
+st.markdown("#### Interpretation Framework")
+st.markdown(r"""
+The comparison between **unweighted** and **RUCA-weighted** final scores reveals the necessity of context-sensitive weighting.  
+The unweighted model treats all components equally, erasing rural conditions.  
+The weighted model elevates the components that matter most in Micropolitan regions—vehicle access, roads—and down-weights structurally absent elements like transit.
+
+This prevents the erasure of localized transport barriers and creates an equitable, context-aware food access vulnerability score.
+""")
+
+# --- DATASETS ---
+st.markdown("---")
+st.subheader("6. Datasets")
 
 st.markdown("""
-#### U.S. Census Bureau - American Community Survey (ACS) 5-Year Estimates
+The following external datasets were used to construct the vulnerability index:
 
-- **Median Household Income:** U.S. Census Bureau. (2024). *American Community Survey 5-Year Estimates: B19013 - Median Household Income, 2019-2023*. 
-  [data.census.gov](https://data.census.gov/table/ACSDT5Y2023.B19013)
-
-- **Poverty Status:** U.S. Census Bureau. (2024). *American Community Survey 5-Year Estimates: S1701 - Poverty Status, 2019-2023*. 
-  [data.census.gov](https://data.census.gov/table/ACSST5Y2023.S1701)
-
-- **Vehicle Availability:** U.S. Census Bureau. (2024). *American Community Survey 5-Year Estimates: B08201 - Household Size by Vehicles Available, 2019-2023*. 
-  [data.census.gov](https://data.census.gov/table/ACSDT5Y2023.B08201)
-
-#### National Neighborhood Data Archive (NaNDA) - ICPSR
-
-- **Grocery Stores:** Melendez, R., Finlay, J., Clarke, P., Noppert, G., & Gypin, L. (2024). *NaNDA: Grocery and Food Stores by Census Tract and ZCTA, United States, 1990-2021*. 
-  [https://doi.org/10.3886/E209313V1](https://doi.org/10.3886/E209313V1)
-
-- **Transit Stops:** Pan, L., Melendez, R., Clarke, P., Noppert, G., Gomez-Lopez, I., Chenoweth, M., & Gypin, L. (2024). *NaNDA: Public Transit Stops by Census Tract and ZCTA, United States, 2016-2018 and 2024*. 
-  [https://doi.org/10.3886/ICPSR38605.v2](https://doi.org/10.3886/ICPSR38605.v2)
-
-- **Road Infrastructure:** Pan, L., Melendez, R., Clarke, P., Noppert, G., & Gypin, L. (2024). *NaNDA: Primary and Secondary Roads by Census Tract and ZCTA, United States, 2010 and 2020*. 
-  [https://doi.org/10.3886/ICPSR38585.v2](https://doi.org/10.3886/ICPSR38585.v2)
-
-- **Internet Access:** Li, M., Gomez-Lopez, I., Khan, A., Clarke, P., & Chenoweth, M. (2022). *NaNDA: Internet Access by Census Tract and ZCTA, United States, 2015-2019*. 
-  [https://doi.org/10.3886/ICPSR38559.v1](https://doi.org/10.3886/ICPSR38559.v1)
-
-#### USDA Economic Research Service
-
-- **Rural-Urban Continuum Codes (RUCC):** U.S. Department of Agriculture, Economic Research Service. (January 2024). *Rural-Urban Continuum Codes*. 
-  [USDA ERS](https://www.ers.usda.gov/data-products/rural-urban-continuum-codes/)
-
-- **Rural-Urban Commuting Area Codes (RUCA):** U.S. Department of Agriculture, Economic Research Service. (July 2025). *2020 Rural-Urban Commuting Area Codes*. 
-  [USDA ERS](https://www.ers.usda.gov/data-products/rural-urban-commuting-area-codes/)
-
-#### Geographic Crosswalks
-
-- **HUD-USPS ZIP Code Crosswalk:** U.S. Department of Housing and Urban Development, Office of Policy Development and Research. *HUD-USPS ZIP Code Crosswalk Files*. 
-  [huduser.gov/portal/datasets/usps_crosswalk.html](https://www.huduser.gov/portal/datasets/usps_crosswalk.html)
+| Dataset | Contribution | Source |
+|---------|--------------|--------|
+| **ACS 5-Year Estimates (2019-2023)** | Socioeconomic indicators: median income, poverty status, vehicle availability, internet access | [U.S. Census Bureau](https://data.census.gov) |
+| **NaNDA Grocery Stores (2020)** | Grocery store density by census tract | [ICPSR](https://doi.org/10.3886/E209313V1) |
+| **NaNDA Transit Stops (2024)** | Public transit stop counts per tract | [ICPSR](https://doi.org/10.3886/ICPSR38605.v2) |
+| **NaNDA Road Infrastructure (2020)** | Primary/secondary road density as walkability proxy | [ICPSR](https://doi.org/10.3886/ICPSR38585.v2) |
+| **NaNDA Internet Access (2019)** | Household internet connectivity estimates | [ICPSR](https://doi.org/10.3886/ICPSR38559.v1) |
+| **USDA RUCA Codes (2020)** | Rural-urban connectivity and commuting context | [USDA ERS](https://www.ers.usda.gov/data-products/rural-urban-commuting-area-codes/) |
+| **USDA RUCC Codes (2023)** | County-level rural-urban classification | [USDA ERS](https://www.ers.usda.gov/data-products/rural-urban-continuum-codes/) |
+| **HUD ZIP-Tract Crosswalk (2020)** | Geographic alignment for ZCTA-tract merges | [HUD User](https://www.huduser.gov/portal/datasets/usps_crosswalk.html) |
 """)
