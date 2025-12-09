@@ -288,3 +288,14 @@ The following external datasets were used to construct the vulnerability index:
 | **USDA RUCC Codes (2023)** | County-level rural-urban classification | [USDA ERS](https://www.ers.usda.gov/data-products/rural-urban-continuum-codes/) |
 | **HUD ZIP-Tract Crosswalk (2020)** | Geographic alignment for ZCTA-tract merges | [HUD User](https://www.huduser.gov/portal/datasets/usps_crosswalk.html) |
 """)
+
+# --- FOOTER ---
+st.markdown(
+    r"""
+    <hr/>
+    <p style='text-align:center'>
+    <a href='https://github.com/phinnphace/MVP-Food-access-county' target='_blank'>GitHub Repository</a>
+    </p>
+    """,
+    unsafe_allow_html=True,
+)
