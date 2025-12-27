@@ -130,6 +130,13 @@ MAX_SCORE = final_geodf[config['field']].max()
 
 st.caption(f"Score Range: {MIN_SCORE:.2f} (Low) to {MAX_SCORE:.2f} (High) | {config['label']}")
 
+# Convert to GeoJSON for Plotly
+geojson_data = json.loads(final_geodf.to_json())
+
+# Calculate center
+centroid = final_geodf.geometry.unary_union.centroid
+center_lat, center_lon = centroid.y, centroid.x
+
 # Create the map
 fig = px.choropleth_mapbox(
     final_geodf,
