@@ -92,7 +92,7 @@ layer_config = {
     },
     "Vehicle Access (C_Vehicle_A)": {
         "field": "C_Vehicle_A",
-        "colorscale": "Browns",
+        "colorscale": "YlOrBr",
         "label": "Vehicle Access Vulnerability (Z-score)",
         "reversed": False
     },
