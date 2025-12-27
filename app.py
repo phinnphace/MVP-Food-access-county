@@ -30,59 +30,130 @@ if final_geodf.empty:
     st.error("No data loaded. Please check the file path.")
     st.stop()
 
-# --- 2. MAP VISUALIZATION ---
+# --- 2. MAP VISUALIZATION WITH LAYER TOGGLES ---
 st.title("🍎 Food Access Vulnerability: Contextual Scoring in Decatur County, GA")
 
 st.markdown("""
-**RUCA (Rural-Urban Commuting Area)** codes classify census tracts based on how people live and travel. 
-Unlike county-level categories, RUCA identifies whether a tract is urban, suburban, rural, or remote 
-by looking at commuting patterns and local connectivity. It gives a more realistic picture of access 
-conditions, especially in areas where a single county includes both dense urban centers and isolated 
-rural communities. RUCA helps interpret food access barriers in context rather than treating all 
-"rural" or all "urban" places the same.
-
-This dashboard demonstrates an **Equity-Centered Scoring Model** where context (RUCA classification) 
-is used to weight components, correcting for the flaws of 'one-size-fits-all' vulnerability indices. 
-The model incorporates **Composite Economic** and **Systemic Transit Penalty** factors.
+**Explore different vulnerability components using the layer selector below.**
+Toggle between Overall Weighted score and individual vulnerability components.
 """)
 
-# --- A. Create Plotly Choropleth Map ---
-st.subheader("1. Final Contextual Vulnerability Score (V_final_Weighted)")
+# --- LAYER SELECTOR ---
+col1, col2 = st.columns([3, 1])
+with col1:
+    # Layer selection
+    selected_layer = st.selectbox(
+        "Select vulnerability layer to display:",
+        [
+            "Overall Weighted (V_final_Weighted)",
+            "Economic (C_Economic)",
+            "Geographic (C_Geographic)",
+            "Transport Composite (TVS)",
+            "Vehicle Access (C_Vehicle_A)",
+            "Internet Access (C_Internet_C)",
+            "Road Infrastructure (C_Roads_D)"
+        ],
+        index=0
+    )
 
-MIN_SCORE = final_geodf['V_final_Weighted'].min()
-MAX_SCORE = final_geodf['V_final_Weighted'].max()
+with col2:
+    # Basemap selector
+    basemap = st.selectbox(
+        "Basemap:",
+        ["Light (carto-positron)", "OpenStreetMap", "Dark", "Satellite"],
+        index=0
+    )
 
-st.caption(f"Score Range: {MIN_SCORE:.2f} (Green/Low Vulnerability) to {MAX_SCORE:.2f} (Red/High Vulnerability)")
+# Map layer to data field and colors
+layer_config = {
+    "Overall Weighted (V_final_Weighted)": {
+        "field": "V_final_Weighted",
+        "colorscale": "Reds",
+        "label": "Weighted Vulnerability Score",
+        "reversed": False
+    },
+    "Economic (C_Economic)": {
+        "field": "C_Economic",
+        "colorscale": "Oranges",
+        "label": "Economic Vulnerability (Z-score)",
+        "reversed": False
+    },
+    "Geographic (C_Geographic)": {
+        "field": "C_Geographic",
+        "colorscale": "Purples",
+        "label": "Geographic Vulnerability (Z-score)",
+        "reversed": False
+    },
+    "Transport Composite (TVS)": {
+        "field": "TVS",
+        "colorscale": "Blues",
+        "label": "Transport Vulnerability Score",
+        "reversed": False
+    },
+    "Vehicle Access (C_Vehicle_A)": {
+        "field": "C_Vehicle_A",
+        "colorscale": "Browns",
+        "label": "Vehicle Access Vulnerability (Z-score)",
+        "reversed": False
+    },
+    "Internet Access (C_Internet_C)": {
+        "field": "C_Internet_C",
+        "colorscale": "Greens",
+        "label": "Internet Access Vulnerability (Z-score)",
+        "reversed": False
+    },
+    "Road Infrastructure (C_Roads_D)": {
+        "field": "C_Roads_D",
+        "colorscale": "Greys",
+        "label": "Road Infrastructure Vulnerability (Z-score)",
+        "reversed": False
+    }
+}
 
-# Convert to GeoJSON for Plotly
-geojson_data = json.loads(final_geodf.to_json())
+# Get selected config
+config = layer_config[selected_layer]
 
-# Calculate center
-centroid = final_geodf.geometry.unary_union.centroid
-center_lat, center_lon = centroid.y, centroid.x
+# Basemap mapping
+basemap_styles = {
+    "Light (carto-positron)": "carto-positron",
+    "OpenStreetMap": "open-street-map",
+    "Dark": "carto-darkmatter",
+    "Satellite": "white-bg"
+}
 
-# Create Plotly choropleth
+# --- Create Plotly Choropleth Map ---
+st.subheader(f"1. {selected_layer.split('(')[0].strip()}")
+
+# Calculate min/max for color scale
+MIN_SCORE = final_geodf[config['field']].min()
+MAX_SCORE = final_geodf[config['field']].max()
+
+st.caption(f"Score Range: {MIN_SCORE:.2f} (Low) to {MAX_SCORE:.2f} (High) | {config['label']}")
+
+# Create the map
 fig = px.choropleth_mapbox(
     final_geodf,
     geojson=geojson_data,
     locations=final_geodf.index,
-    color='V_final_Weighted',
-    color_continuous_scale='RdYlGn_r',  # Red-Yellow-Green reversed (red = high)
+    color=config['field'],
+    color_continuous_scale=config['colorscale'],
     range_color=[MIN_SCORE, MAX_SCORE],
-    mapbox_style='carto-positron',
+    mapbox_style=basemap_styles[basemap],
     zoom=9,
     center={"lat": center_lat, "lon": center_lon},
     opacity=0.7,
     hover_data={
         'GEOID': True,
+        config['field']: ':.2f',
         'V_final_Weighted': ':.2f',
-        'V_final_Unweighted': ':.2f',
-        'poverty_pct': ':.1f'
+        'poverty_pct': ':.1f',
+        'no_vehicle_pct': ':.1f'
     },
     labels={
-        'V_final_Weighted': 'Weighted Score',
-        'V_final_Unweighted': 'Unweighted Score',
-        'poverty_pct': 'Poverty %'
+        config['field']: config['label'],
+        'V_final_Weighted': 'Overall Score',
+        'poverty_pct': 'Poverty %',
+        'no_vehicle_pct': 'No Vehicle %'
     }
 )
 
@@ -90,12 +161,25 @@ fig.update_layout(
     margin={"r": 0, "t": 0, "l": 0, "b": 0},
     height=500,
     coloraxis_colorbar=dict(
-        title="Vulnerability<br>Score",
+        title=config['label'][:20] + "<br>" + config['label'][20:] if len(config['label']) > 20 else config['label'],
         tickformat=".1f"
     )
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
+# --- Layer Description ---
+layer_descriptions = {
+    "Overall Weighted (V_final_Weighted)": "**Final contextual vulnerability score** incorporating RUCA-based weighting of transport components.",
+    "Economic (C_Economic)": "**Economic vulnerability composite** = -Z(Income) + Z(Poverty Rate). Captures both affluence and deprivation.",
+    "Geographic (C_Geographic)": "**Geographic access vulnerability** = -Z(Grocery Store Density). Lower density = higher vulnerability.",
+    "Transport Composite (TVS)": "**Transport Vulnerability Score** = 0.5×Vehicle + 0.2×Transit + 0.2×Internet + 0.1×Roads (RUCA-weighted).",
+    "Vehicle Access (C_Vehicle_A)": "**Vehicle access vulnerability** = Z(% Households with No Vehicle). Heavily weighted (50%) in rural contexts.",
+    "Internet Access (C_Internet_C)": "**Internet access vulnerability** = Z(No Internet) + Z(No Broadband) - Z(Cellular Only).",
+    "Road Infrastructure (C_Roads_D)": "**Road infrastructure vulnerability** = -Z(% Primary/Secondary Roads). Lower road density = higher vulnerability."
+}
+
+st.info(layer_descriptions[selected_layer])
 
 # --- 3. COMPARATIVE ANALYSIS ---
 st.markdown("---")
