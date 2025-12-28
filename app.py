@@ -3,22 +3,20 @@ import geopandas as gpd
 import pandas as pd
 import altair as alt
 import plotly.express as px
+import plotly.graph_objects as go
 import json
 import os
 
 # --- 1. CONFIGURATION AND DATA LOADING ---
-st.set_page_config(layout="wide", page_title="Decatur County Contextual Vulnerability Score")
+st.set_page_config(layout="wide", page_title="Decatur County Vulnerability Critique")
 
-# Works for both local development and Streamlit Cloud
-FINAL_DATA_PATH = os.path.join(os.path.dirname(__file__), 'tracts_data.geojson') # Updated to match your repo filename
+FINAL_DATA_PATH = os.path.join(os.path.dirname(__file__), 'tracts_data.geojson')
 JOIN_COLUMN = 'GEOID'
 
 @st.cache_data
 def load_final_geodata(filepath):
-    """Loads the final scored GeoDataFrame."""
     try:
         final_geodf = gpd.read_file(filepath)
-        # Ensure GEOID is a string for consistent merging/tooltip display
         if JOIN_COLUMN in final_geodf.columns:
             final_geodf[JOIN_COLUMN] = final_geodf[JOIN_COLUMN].astype(str)
         return final_geodf
@@ -29,186 +27,130 @@ def load_final_geodata(filepath):
 final_geodf = load_final_geodata(FINAL_DATA_PATH)
 
 if final_geodf.empty:
-    st.error("No data loaded. Please check that 'tracts_data.geojson' is in your repository.")
+    st.error("No data loaded. Please check 'tracts_data.geojson' in repo.")
     st.stop()
 
 # --- 2. SIDEBAR CONTROLS ---
-st.sidebar.header("Map Controls")
+st.sidebar.header("Explore the Model")
 
-# A. Layer Selection
-layer_config = {
-    "Overall Weighted (V_final_Weighted)": {
-        "field": "V_final_Weighted",
-        "colorscale": "RdYlGn_r", # Red = High Vulnerability
-        "label": "Weighted Vulnerability Score",
-        "description": "**Final contextual vulnerability score** incorporating RUCA-based weighting of transport components."
+# Narrative Structure
+layer_structure = {
+    "1. Composite Vulnerability Drivers": {
+        "Economic Vulnerability": "C_Economic",
+        "Geographic (Food) Vulnerability": "C_Geographic",
+        "Transportation Vulnerability (TVS)": "TVS"
     },
-    "Economic (C_Economic)": {
-        "field": "C_Economic",
-        "colorscale": "Oranges",
-        "label": "Economic Vulnerability (Z-score)",
-        "description": "**Economic vulnerability composite** = -Z(Income) + Z(Poverty Rate). Captures both affluence and deprivation."
+    "2. Systemic Transit Impact Components": {
+        "Transit Access (Penalty Score)": "C_Transit_B", 
+        "Vehicle Access": "C_Vehicle_A",
+        "Internet Access": "C_Internet_C",
+        "Walkability (Road Density)": "C_Roads_D"
     },
-    "Geographic (C_Geographic)": {
-        "field": "C_Geographic",
-        "colorscale": "Purples",
-        "label": "Geographic Vulnerability (Z-score)",
-        "description": "**Geographic access vulnerability** = -Z(Grocery Store Density). Lower density = higher vulnerability."
-    },
-    "Transport Composite (TVS)": {
-        "field": "TVS",
-        "colorscale": "Blues",
-        "label": "Transport Vulnerability Score",
-        "description": "**Transport Vulnerability Score** = 0.5×Vehicle + 0.2×Transit + 0.2×Internet + 0.1×Roads (RUCA-weighted)."
-    },
-    "Vehicle Access (C_Vehicle_A)": {
-        "field": "C_Vehicle_A",
-        "colorscale": "Reds",
-        "label": "Vehicle Access Vulnerability (Z-score)",
-        "description": "**Vehicle access vulnerability** = Z(% Households with No Vehicle). Heavily weighted (50%) in rural contexts."
-    },
-    "Internet Access (C_Internet_C)": {
-        "field": "C_Internet_C",
-        "colorscale": "Greens", # Reverse this if High Score = Bad, usually Greens is Good=Dark
-        "label": "Internet Access Vulnerability (Z-score)",
-        "description": "**Internet access vulnerability** = Z(No Internet) + Z(No Broadband) - Z(Cellular Only)."
-    },
-    "Road Infrastructure (C_Roads_D)": {
-        "field": "C_Roads_D",
-        "colorscale": "Greys",
-        "label": "Road Infrastructure Vulnerability (Z-score)",
-        "description": "**Road infrastructure vulnerability** = -Z(% Primary/Secondary Roads). Lower road density = higher vulnerability."
+    "3. Assessment Models": {
+        "Final Unweighted Score": "V_final_Unweighted",
+        "Final Weighted Score (RUCA Adjusted)": "V_final_Weighted"
     }
 }
 
-selected_layer = st.sidebar.radio(
-    "Select Vulnerability Layer:",
-    options=list(layer_config.keys())
-)
+selected_category = st.sidebar.selectbox("Select Analysis Dimension:", list(layer_structure.keys()))
+selected_label = st.sidebar.radio("Select Layer:", list(layer_structure[selected_category].keys()))
+selected_col = layer_structure[selected_category][selected_label]
 
-# Get selected config
-config = layer_config[selected_layer]
-
-# B. Basemap Selection
-basemap_styles = {
-    "Light (carto-positron)": "carto-positron",
-    "OpenStreetMap": "open-street-map",
-    "Dark": "carto-darkmatter",
-    "Satellite": "white-bg"
+# Layer Styling
+layer_details = {
+    "C_Economic": {"colorscale": "Oranges", "desc": "**Economic Vulnerability** = -Z(Income) + Z(Poverty). High values indicate high poverty/low income."},
+    "C_Geographic": {"colorscale": "Purples", "desc": "**Geographic Vulnerability** = -Z(Food Store Density). Captures the physical distance barrier."},
+    "TVS": {"colorscale": "Blues", "desc": "**Transport Vulnerability Score (TVS)** = Weighted composite of Vehicle, Transit, Internet, and Roads."},
+    "C_Transit_B": {"colorscale": "Reds", "desc": "**Transit Access Score.** Uniform score (3.0) represents 'Systemic Penalty' for absence of transit."},
+    "C_Vehicle_A": {"colorscale": "YlOrBr", "desc": "**Vehicle Access.** Measures % of households without a vehicle."},
+    "C_Internet_C": {"colorscale": "Greens", "desc": "**Internet Access.** Digital connectivity as a substitute for physical access."},
+    "C_Roads_D": {"colorscale": "Greys", "desc": "**Walkability.** Primary/secondary road density as infrastructure proxy."},
+    "V_final_Unweighted": {"colorscale": "RdYlGn_r", "desc": "**Unweighted Score.** Simple sum of vulnerabilities."},
+    "V_final_Weighted": {"colorscale": "RdYlGn_r", "desc": "**Final Weighted Score.** Adjusts for RUCA context."}
 }
+current_config = layer_details.get(selected_col, {"colorscale": "Viridis", "desc": ""})
+
+# Basemap
 selected_basemap = st.sidebar.selectbox(
-    "Select Basemap Style:",
-    options=list(basemap_styles.keys())
+    "Basemap Style:",
+    options={"Light": "carto-positron", "OpenStreetMap": "open-street-map", "Satellite": "white-bg"}
 )
+basemap_style = selected_basemap.split()[-1] if " " in selected_basemap else {"Light": "carto-positron", "OpenStreetMap": "open-street-map", "Satellite": "white-bg"}[selected_basemap]
 
 # --- 3. MAIN DASHBOARD ---
-st.title("🍎 Food Access Vulnerability: Contextual Scoring in Decatur County, GA")
+st.title("Decatur County: Equity-Centered Vulnerability Model")
+st.markdown("### An Invitation to Critique")
+st.info(f"**Viewing: {selected_label}**\n\n{current_config['desc']}")
 
-st.markdown("""
-**RUCA (Rural-Urban Commuting Area)** codes classify census tracts based on how people live and travel. 
-Unlike county-level categories, RUCA identifies whether a tract is urban, suburban, rural, or remote 
-by looking at commuting patterns and local connectivity. It gives a more realistic picture of access 
-conditions, especially in areas where a single county includes both dense urban centers and isolated 
-rural communities.
-""")
-
-# --- MAP VISUALIZATION ---
-st.subheader(f"1. {selected_layer.split('(')[0].strip()}")
-
-# Dynamic Description based on selection
-st.info(config['description'])
-
-# Calculate min/max for color scale
-# Rigor Check: Handle missing columns gracefully
-if config['field'] not in final_geodf.columns:
-    st.error(f"Column '{config['field']}' not found in data. Please check your data export.")
+# Map Logic
+if selected_col not in final_geodf.columns:
+    st.error(f"Column '{selected_col}' missing.")
     st.stop()
 
-MIN_SCORE = final_geodf[config['field']].min()
-MAX_SCORE = final_geodf[config['field']].max()
-
-st.caption(f"Score Range: {MIN_SCORE:.2f} (Low Vulnerability) to {MAX_SCORE:.2f} (High Vulnerability)")
-
-# Convert to GeoJSON for Plotly
-geojson_data = json.loads(final_geodf.to_json())
-
-# Calculate center
-centroid = final_geodf.geometry.unary_union.centroid
-center_lat, center_lon = centroid.y, centroid.x
-
-# Create Plotly choropleth
+# 1. Base Choropleth Layer
 fig = px.choropleth_mapbox(
     final_geodf,
-    geojson=geojson_data,
+    geojson=json.loads(final_geodf.to_json()),
     locations=final_geodf.index,
-    color=config['field'],
-    color_continuous_scale=config['colorscale'],
-    range_color=[MIN_SCORE, MAX_SCORE],
-    mapbox_style=basemap_styles[selected_basemap],
-    zoom=9,
-    center={"lat": center_lat, "lon": center_lon},
-    opacity=0.7,
-    hover_data={
-        'GEOID': True,
-        config['field']: ':.2f',
-        'V_final_Weighted': ':.2f',
-        'poverty_pct': ':.1f'
-    },
-    labels={
-        config['field']: "Current Score",
-        'V_final_Weighted': 'Overall Score',
-        'poverty_pct': 'Poverty %'
-    }
+    color=selected_col,
+    color_continuous_scale=current_config['colorscale'],
+    mapbox_style=basemap_style,
+    zoom=9.2,
+    center={"lat": final_geodf.geometry.centroid.y.mean(), "lon": final_geodf.geometry.centroid.x.mean()},
+    opacity=0.6,
+    hover_data={'GEOID': True, selected_col: ':.2f'}
 )
 
-fig.update_layout(
-    margin={"r": 0, "t": 0, "l": 0, "b": 0},
-    height=500,
-    coloraxis_colorbar=dict(
-        title=config['label'][:20] + "<br>" + config['label'][20:] if len(config['label']) > 20 else config['label'],
-        tickformat=".1f"
-    )
-)
+# 2. ADDING STATIC LABELS (FIPS Codes)
+# We calculate the centroid of each tract to place the text label
+# This creates a "Text Layer" on top of the map
+final_geodf['centroid_lat'] = final_geodf.geometry.centroid.y
+final_geodf['centroid_lon'] = final_geodf.geometry.centroid.x
 
+fig.add_trace(go.Scattermapbox(
+    lat=final_geodf['centroid_lat'],
+    lon=final_geodf['centroid_lon'],
+    mode='text',
+    text=final_geodf['GEOID'], # The text to display
+    textposition="middle center",
+    textfont=dict(size=10, color='black'), # Adjust size/color for readability
+    showlegend=False,
+    hoverinfo='none' # The text itself doesn't need hover info
+))
+
+# 3. ADDING STATIC OUTLINES
+# This forces a white border around every polygon
+fig.update_traces(marker_line_width=1.5, marker_line_color="white")
+
+fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=600)
 st.plotly_chart(fig, use_container_width=True)
 
-# --- 4. COMPARATIVE ANALYSIS (Unchanged for Rigor) ---
+# --- 4. COMPONENT BREAKDOWN ---
 st.markdown("---")
-st.subheader("2. Context vs. Flattening: Comparison of Scoring Models")
+st.subheader("Trace the Score: Component Breakdown")
+st.write("Select a tract to see exactly how its score was built.")
 
-st.markdown("""
-The comparison shows the difference between the **Unweighted Score** (simple additive) 
-and the **Weighted Score** (using Transport Vulnerability Score with RUCA context weights).
-""")
+selected_geoid = st.selectbox("Select Tract (FIPS):", final_geodf['GEOID'].sort_values())
 
-# Melt data for Altair
-comparison_cols = ['GEOID', 'V_final_Unweighted', 'V_final_Weighted']
-if all(col in final_geodf.columns for col in comparison_cols):
-    comparison_data = final_geodf[comparison_cols].melt(
-        id_vars='GEOID', var_name='Score Type', value_name='Score'
-    )
+comp_list = ['C_Economic', 'C_Geographic', 'C_Vehicle_A', 'C_Transit_B', 'C_Internet_C', 'C_Roads_D']
+available_comps = [c for c in comp_list if c in final_geodf.columns]
 
-    chart_comp = alt.Chart(comparison_data).mark_bar().encode(
-        x=alt.X('GEOID:N', sort=alt.EncodingSortField(field="Score", op="max", order="descending"), title='Tract GEOID'),
-        y=alt.Y('Score:Q', title='Vulnerability Score (Higher = More Vulnerable)'),
-        color=alt.Color('Score Type:N', scale=alt.Scale(range=['#007ACC', '#D34D4D']), 
-                        legend=alt.Legend(title="Score Type")),
-        xOffset='Score Type:N',
-        tooltip=['GEOID', 'Score Type', alt.Tooltip('Score', format=".2f")]
-    ).properties(
-        title="Unweighted vs. Weighted (TVS) Vulnerability Scores",
-        height=400
-    ).interactive()
+if available_comps:
+    row = final_geodf[final_geodf['GEOID'] == selected_geoid].iloc[0]
+    chart_data = pd.DataFrame({'Component': available_comps, 'Score': [row[c] for c in available_comps]})
+    
+    c = alt.Chart(chart_data).mark_bar().encode(
+        x=alt.X('Score', title='Vulnerability Contribution'),
+        y=alt.Y('Component', sort=None),
+        color=alt.condition(alt.datum.Score > 0, alt.value('#D34D4D'), alt.value('#2E8B57')),
+        tooltip=['Component', 'Score']
+    ).properties(height=300)
+    st.altair_chart(c, use_container_width=True)
 
-    st.altair_chart(chart_comp, use_container_width=True)
-else:
-    st.warning("Comparison columns not found in dataset.")
-
-# --- SECTIONS 5 & 6: METHODOLOGY, DATASETS, AND FOOTER ---
+# --- SECTIONS 5 & 6 ---
 st.markdown("---")
 st.subheader("5. Model Methodology")
-
-st.markdown(r"""
+# ... (st.markdown(r"""
 All standardized variables use global mean ($\mu$) and global standard deviation ($\sigma$) from the master dataset.  
 This ensures Decatur County's tracts (N=8) are evaluated relative to the broader landscape rather than an artificially small local sample.
 """)
