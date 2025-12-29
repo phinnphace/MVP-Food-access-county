@@ -125,7 +125,12 @@ fig.add_trace(go.Scattermapbox(
 ))
 
 # 3. ADDING STATIC OUTLINES
-fig.update_traces(marker_line_width=2, marker_line_color="white")
+# Apply the outline ONLY to the Choropleth (the polygons), not the text layer
+fig.update_traces(
+    marker_line_width=2, 
+    marker_line_color="white", 
+    selector=dict(type='choroplethmapbox')
+)
 
 fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=600)
 st.plotly_chart(fig, use_container_width=True)
