@@ -8,7 +8,10 @@ import json
 import os
 
 # --- 1. CONFIGURATION AND DATA LOADING ---
-st.set_page_config(layout="wide", page_title="Decatur County Vulnerability Critique")
+st.set_page_config(
+    layout="wide", 
+    page_title="Seeing through the Map"
+)
 
 FINAL_DATA_PATH = os.path.join(os.path.dirname(__file__), 'tracts_data.geojson')
 JOIN_COLUMN = 'GEOID'
@@ -41,7 +44,7 @@ layer_structure = {
         "Transportation Vulnerability (TVS)": "TVS"
     },
     "2. Systemic Transit Impact Components": {
-        "Transit Access (Penalty Score)": "C_Transit_B", 
+        "Transit Access": "C_Transit_B", # Renamed from "Penalty Score"
         "Vehicle Access": "C_Vehicle_A",
         "Internet Access": "C_Internet_C",
         "Walkability (Road Density)": "C_Roads_D"
@@ -61,7 +64,7 @@ layer_details = {
     "C_Economic": {"colorscale": "Oranges", "desc": "**Economic Vulnerability** = -Z(Income) + Z(Poverty). High values indicate high poverty/low income."},
     "C_Geographic": {"colorscale": "Purples", "desc": "**Geographic Vulnerability** = -Z(Food Store Density). Captures the physical distance barrier."},
     "TVS": {"colorscale": "Blues", "desc": "**Transport Vulnerability Score (TVS)** = Weighted composite of Vehicle, Transit, Internet, and Roads."},
-    "C_Transit_B": {"colorscale": "Reds", "desc": "**Transit Access Score.** Uniform score (3.0) represents 'Systemic Penalty' for absence of transit."},
+    "C_Transit_B": {"colorscale": "Reds", "desc": "**Transit Access Score.** Measures availability of public transit infrastructure. (See methodology for weighting details)."},
     "C_Vehicle_A": {"colorscale": "YlOrBr", "desc": "**Vehicle Access.** Measures % of households without a vehicle."},
     "C_Internet_C": {"colorscale": "Greens", "desc": "**Internet Access.** Digital connectivity as a substitute for physical access."},
     "C_Roads_D": {"colorscale": "Greys", "desc": "**Walkability.** Primary/secondary road density as infrastructure proxy."},
@@ -70,16 +73,21 @@ layer_details = {
 }
 current_config = layer_details.get(selected_col, {"colorscale": "Viridis", "desc": ""})
 
-# Basemap
-selected_basemap = st.sidebar.selectbox(
-    "Basemap Style:",
-    options={"Light": "carto-positron", "OpenStreetMap": "open-street-map", "Satellite": "white-bg"}
-)
-basemap_style = selected_basemap.split()[-1] if " " in selected_basemap else {"Light": "carto-positron", "OpenStreetMap": "open-street-map", "Satellite": "white-bg"}[selected_basemap]
-
 # --- 3. MAIN DASHBOARD ---
-st.title("Decatur County: Equity-Centered Vulnerability Model")
-st.markdown("### An Invitation to Critique")
+# New Title reflecting the methodological focus
+st.title("Seeing through the Map: A Static Test of Classification, Measurement, and Proxy Logic")
+
+st.markdown("""
+### An Invitation to Critique
+This dashboard is not a statement of fact, but a **proposal for measurement**. 
+Standard USDA maps often erase local nuance. This model attempts to correct that by introducing **Contextual Weighting (RUCA)** and accounting for systemic infrastructure gaps.
+
+**How to use this tool:**
+1.  **Deconstruct:** Use the sidebar to view the raw components (like Transit or Internet).
+2.  **Compare:** Look at how the *Unweighted* score differs from the *Weighted* score.
+3.  **Ask:** Does this classification logic hold up? Where does the proxy logic fail?
+""")
+
 st.info(f"**Viewing: {selected_label}**\n\n{current_config['desc']}")
 
 # Map Logic
@@ -94,7 +102,7 @@ fig = px.choropleth_mapbox(
     locations=final_geodf.index,
     color=selected_col,
     color_continuous_scale=current_config['colorscale'],
-    mapbox_style=basemap_style,
+    mapbox_style="open-street-map", # Hardcoded to OSM as requested
     zoom=9.2,
     center={"lat": final_geodf.geometry.centroid.y.mean(), "lon": final_geodf.geometry.centroid.x.mean()},
     opacity=0.6,
@@ -102,8 +110,6 @@ fig = px.choropleth_mapbox(
 )
 
 # 2. ADDING STATIC LABELS (FIPS Codes)
-# We calculate the centroid of each tract to place the text label
-# This creates a "Text Layer" on top of the map
 final_geodf['centroid_lat'] = final_geodf.geometry.centroid.y
 final_geodf['centroid_lon'] = final_geodf.geometry.centroid.x
 
@@ -111,16 +117,15 @@ fig.add_trace(go.Scattermapbox(
     lat=final_geodf['centroid_lat'],
     lon=final_geodf['centroid_lon'],
     mode='text',
-    text=final_geodf['GEOID'], # The text to display
+    text=final_geodf['GEOID'],
     textposition="middle center",
-    textfont=dict(size=10, color='black'), # Adjust size/color for readability
+    textfont=dict(size=12, color='black', weight='bold'), # Slightly bumped size/weight for readability on OSM
     showlegend=False,
-    hoverinfo='none' # The text itself doesn't need hover info
+    hoverinfo='none'
 ))
 
 # 3. ADDING STATIC OUTLINES
-# This forces a white border around every polygon
-fig.update_traces(marker_line_width=1.5, marker_line_color="white")
+fig.update_traces(marker_line_width=2, marker_line_color="white")
 
 fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, height=600)
 st.plotly_chart(fig, use_container_width=True)
@@ -147,16 +152,16 @@ if available_comps:
     ).properties(height=300)
     st.altair_chart(c, use_container_width=True)
 
-# --- SECTIONS 5 & 6 ---
+# --- SECTIONS 5 & 6: METHODOLOGY ---
 st.markdown("---")
 st.subheader("5. Model Methodology")
-# ... (st.markdown(r"""
+
+st.markdown(r"""
 All standardized variables use global mean ($\mu$) and global standard deviation ($\sigma$) from the master dataset.  
-This ensures Decatur County's tracts (N=8) are evaluated relative to the broader landscape rather than an artificially small local sample.
+This ensures these tracts are evaluated relative to the broader landscape.
 """)
 
 st.markdown("#### Model Formulas")
-
 st.markdown("**Final Weighted Model**")
 st.latex(r"V_{final\_W} = C_{Eco} + C_{Geo} + TVS")
 
